@@ -9,23 +9,6 @@
 #import "../SqflitePlugin.h"
 #import "../GuruSqliteLog.h"
 
-// 格式化JSON对象为易读字符串
-NSString* FormatJSONObject(id obj) {
-    if (!obj) return @"null";
-    if ([obj isKindOfClass:[NSString class]]) return obj;
-    
-    NSError *error;
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:obj
-                                                       options:NSJSONWritingPrettyPrinted
-                                                         error:&error];
-    if (jsonData) {
-        NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-        return jsonString;
-    } else {
-        return [NSString stringWithFormat:@"<无法序列化的对象: %@>", [obj description]];
-    }
-}
-
 // Store result callbacks by callId to prevent them from being deallocated
 static NSMutableDictionary<NSNumber*, void(^)(id)> *resultCallbacks;
 

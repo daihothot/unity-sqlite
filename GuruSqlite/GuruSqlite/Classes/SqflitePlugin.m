@@ -209,7 +209,7 @@ static SqflitePlugin *sharedInstance = nil;
     
     NSString* errorMessage = [NSString stringWithFormat:@"%@", [db lastError]];
     LogError(@"SQLite operation error: %@", errorMessage);
-    NSString* sql = [operation getSql];
+    sql = [operation getSql];
     if (sql != nil) {
         LogDebug(@"Failed SQL: %@", sql);
     }
