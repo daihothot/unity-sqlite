@@ -8,19 +8,76 @@
 #import "UnityFlutterMock.h"
 #import "../SqflitePlugin.h"
 
+// 日志级别定义
+typedef enum {
+    LogLevelNone = 0,   // 不输出任何日志
+    LogLevelError = 1,  // 只输出错误
+    LogLevelWarning = 2,// 输出警告和错误
+    LogLevelInfo = 3,   // 输出信息、警告和错误
+    LogLevelDebug = 4   // 输出所有调试信息
+} LogLevel;
+
+// 当前日志级别（默认为Info）
+static LogLevel currentLogLevel = LogLevelInfo;
+
+// 日志函数
+void LogError(NSString *format, ...) {
+    if (currentLogLevel >= LogLevelError) {
+        va_list args;
+        va_start(args, format);
+        NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+        NSLog(@"[GuruSqlite][错误] %@", message);
+        va_end(args);
+    }
+}
+
+void LogWarning(NSString *format, ...) {
+    if (currentLogLevel >= LogLevelWarning) {
+        va_list args;
+        va_start(args, format);
+        NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+        NSLog(@"[GuruSqlite][警告] %@", message);
+        va_end(args);
+    }
+}
+
+void LogInfo(NSString *format, ...) {
+    if (currentLogLevel >= LogLevelInfo) {
+        va_list args;
+        va_start(args, format);
+        NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+        NSLog(@"[GuruSqlite][信息] %@", message);
+        va_end(args);
+    }
+}
+
+void LogDebug(NSString *format, ...) {
+    if (currentLogLevel >= LogLevelDebug) {
+        va_list args;
+        va_start(args, format);
+        NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+        NSLog(@"[GuruSqlite][调试] %@", message);
+        va_end(args);
+    }
+}
+
 // Store result callbacks by callId to prevent them from being deallocated
 static NSMutableDictionary<NSNumber*, void(^)(id)> *resultCallbacks;
 
 // Initialize the result callbacks dictionary
 __attribute__((constructor))
 static void InitializeResultCallbacks(void) {
+    LogInfo(@"初始化回调字典");
     resultCallbacks = [NSMutableDictionary dictionary];
 }
 
 // Convert C result callback to Objective-C block
 FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMethodResultCallback) {
+    LogDebug(@"创建结果回调Block, callId: %d", callId);
+    
     // Create a block that will call the C function pointer
     void (^resultBlock)(id) = ^(id result) {
+        LogDebug(@"处理回调结果 callId: %d, 结果类型: %@", callId, NSStringFromClass([result class]));
         if (onMethodResultCallback) {
             // Handle different result types
             if ([result isKindOfClass:[FlutterError class]]) {
@@ -32,41 +89,61 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
                     @"details": error.details ?: [NSNull null]
                 };
                 
+                LogError(@"回调返回错误: code=%@, message=%@", error.code, error.message);
+                
                 // Convert dictionary to JSON
                 NSError *jsonError;
                 NSData *jsonData = [NSJSONSerialization dataWithJSONObject:errorDict options:0 error:&jsonError];
                 if (jsonData) {
                     NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+                    LogDebug(@"错误JSON序列化成功: %@", jsonString);
                     onMethodResultCallback((__bridge const void *)(jsonString));
                 } else {
+                    LogError(@"错误JSON序列化失败: %@", jsonError);
                     onMethodResultCallback("Error serializing FlutterError");
                 }
             } 
             else if ([result isKindOfClass:[NSString class]]) {
                 // For strings, pass them directly
+                LogDebug(@"回调返回字符串: %@", result);
                 onMethodResultCallback((__bridge const void *)(result));
             }
             else if ([result isKindOfClass:[NSNumber class]]) {
                 // For numbers, convert to string
+                LogDebug(@"回调返回数字: %@", result);
                 onMethodResultCallback((__bridge const void *)([result stringValue]));
             }
             else if ([result isKindOfClass:[NSDictionary class]] || [result isKindOfClass:[NSArray class]]) {
                 // For dictionaries and arrays, convert to JSON
+                NSString *type = [result isKindOfClass:[NSDictionary class]] ? @"字典" : @"数组";
+                
+                // Debug日志输出格式化的JSON
+                NSError *printError;
+                NSData *printData = [NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:&printError];
+                if (printData) {
+                    NSString *printString = [[NSString alloc] initWithData:printData encoding:NSUTF8StringEncoding];
+                    LogDebug(@"回调返回%@: %@", type, printString);
+                }
+                
+                // 实际序列化用于回调
                 NSError *jsonError;
                 NSData *jsonData = [NSJSONSerialization dataWithJSONObject:result options:0 error:&jsonError];
                 if (jsonData) {
                     NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
                     onMethodResultCallback((__bridge const void *)(jsonString));
                 } else {
+                    LogError(@"对象JSON序列化失败: %@", jsonError);
                     onMethodResultCallback("Error serializing result to JSON");
                 }
             }
             else if (result == nil || result == [NSNull null]) {
                 // For nil or NSNull, return null string
+                LogDebug(@"回调返回null");
                 onMethodResultCallback("null");
             }
             else {
                 // For other types, convert to description
+                LogDebug(@"回调返回未知类型: %@", [result class]);
                 onMethodResultCallback((__bridge const void *)([result description]));
             }
         }
@@ -74,6 +151,7 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
         // Remove the callback from the dictionary after it's been called
         if (callId != 0) {
             @synchronized(resultCallbacks) {
+                LogDebug(@"移除回调, callId: %d", callId);
                 [resultCallbacks removeObjectForKey:@(callId)];
             }
         }
@@ -82,6 +160,7 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
     // Store the block in the dictionary to prevent it from being deallocated
     if (callId != 0) {
         @synchronized(resultCallbacks) {
+            LogDebug(@"存储回调, callId: %d", callId);
             resultCallbacks[@(callId)] = resultBlock;
         }
     }
@@ -96,7 +175,8 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
         NSString *method = [NSString stringWithUTF8String:methodName];
         NSString *argsJson = [NSString stringWithUTF8String:jsonArguments];
         
-        NSLog(@"Invoke Method, callId:%d, methodName:%s, jsonArguments:%s", callId, methodName, jsonArguments);
+        LogInfo(@"调用方法开始 ==> callId: %d, 方法: %@", callId, method);
+        LogDebug(@"参数 JSON: %@", argsJson);
         
         // Parse JSON arguments
         NSError *jsonError;
@@ -107,12 +187,14 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
             arguments = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&jsonError];
             
             if (jsonError) {
-                NSLog(@"Error parsing JSON arguments: %@", jsonError);
+                LogError(@"解析JSON参数错误: %@", jsonError);
                 if (onMethodResultCallback) {
                     NSString *errorMsg = [NSString stringWithFormat:@"Error parsing JSON arguments: %@", jsonError.localizedDescription];
                     onMethodResultCallback((__bridge const void *)(errorMsg));
                 }
                 return;
+            } else {
+                LogDebug(@"JSON参数解析成功");
             }
         } else {
             // Empty arguments
@@ -121,6 +203,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
         
         // Create FlutterMethodCall
         FlutterMethodCall *call = [FlutterMethodCall methodCallWithMethodName:method arguments:arguments callId:callId];
+        LogDebug(@"创建方法调用对象: %@", call);
         
         // Create FlutterResult block
         FlutterResult result = CreateFlutterResultBlock(callId, onMethodResultCallback);
@@ -128,7 +211,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
         // Get the plugin instance
         SqflitePlugin *plugin = [SqflitePlugin sharedInstance];
         if (!plugin) {
-            NSLog(@"SqflitePlugin instance not found");
+            LogError(@"SqflitePlugin实例未找到");
             if (onMethodResultCallback) {
                 onMethodResultCallback("SqflitePlugin instance not found");
             }
@@ -136,6 +219,16 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
         }
         
         // Call the plugin's handleMethod
+        LogInfo(@"调用插件方法: %@", call.method);
         [plugin handleMethod:call result:result];
+        LogInfo(@"调用方法完成 <== callId: %d, 方法: %@", callId, method);
+    }
+}
+
+// 设置日志级别的C函数，方便外部调用
+void SetGuruSqliteLogLevel(int level) {
+    if (level >= LogLevelNone && level <= LogLevelDebug) {
+        currentLogLevel = level;
+        NSLog(@"[GuruSqlite] 设置日志级别为: %d", level);
     }
 }
