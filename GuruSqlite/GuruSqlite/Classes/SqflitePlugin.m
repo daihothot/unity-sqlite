@@ -3,6 +3,7 @@
 #import "SqfliteOperation.h"
 #import "SqfliteDarwinImport.h"
 #import "UnityMock/UnityFlutterMock.h"
+#import "GuruSqliteLog.h"
 
 #import <sqlite3.h>
 
@@ -174,18 +175,23 @@ static SqflitePlugin *sharedInstance = nil;
     SqfliteDatabase* database = self.databaseMap[databaseId];
     if (database == nil) {
         NSLog(@"db not found.");
+        LogError(@"Database not found with ID: %@", databaseId);
         result([FlutterError errorWithCode:SqliteErrorCode
                                    message: _errorDatabaseClosed
                                    details:nil]);
         
+    } else {
+        LogDebug(@"Found database with ID: %@, path: %@", databaseId, database.path);
     }
     return database;
 }
 
 - (void)handleError:(SqfliteDarwinDatabase*)db result:(FlutterResult)result {
     // handle error
+    NSString* errorMessage = [NSString stringWithFormat:@"%@", [db lastError]];
+    LogError(@"SQLite error: %@", errorMessage);
     result([FlutterError errorWithCode:SqliteErrorCode
-                               message:[NSString stringWithFormat:@"%@", [db lastError]]
+                               message:errorMessage
                                details:nil]);
 }
 
@@ -201,10 +207,16 @@ static SqflitePlugin *sharedInstance = nil;
         }
     }
     
-    [operation error:([FlutterError errorWithCode:SqliteErrorCode
-                                          message:[NSString stringWithFormat:@"%@", [db lastError]]
-                                          details:details])];
+    NSString* errorMessage = [NSString stringWithFormat:@"%@", [db lastError]];
+    LogError(@"SQLite operation error: %@", errorMessage);
+    NSString* sql = [operation getSql];
+    if (sql != nil) {
+        LogDebug(@"Failed SQL: %@", sql);
+    }
     
+    [operation error:([FlutterError errorWithCode:SqliteErrorCode
+                                          message:errorMessage
+                                          details:details])];
 }
 
 + (NSObject*)toSqlValue:(NSObject*)value {
@@ -351,6 +363,10 @@ static SqflitePlugin *sharedInstance = nil;
     if (sqfliteHasSqlLogLevel(database.logLevel)) {
         NSLog(@"%@ %@", sql, argumentsEmpty ? @"" : sqlArguments);
     }
+    LogDebug(@"Executing query: %@", sql);
+    if (!argumentsEmpty) {
+        LogDebug(@"Query arguments: %@", sqlArguments);
+    }
     
     SqfliteDarwinResultSet *resultSet;
     if (!argumentsEmpty) {
@@ -364,9 +380,11 @@ static SqflitePlugin *sharedInstance = nil;
     
     // handle error
     if ([db hadError]) {
+        LogError(@"Query execution failed");
         [self handleError:db operation:operation];
         return false;
     }
+    LogDebug(@"Query executed successfully");
     
     NSMutableDictionary* results = [SqflitePlugin resultSetToResults:resultSet cursorPageSize:cursorPageSize];
     
@@ -383,6 +401,9 @@ static SqflitePlugin *sharedInstance = nil;
             results[_paramCursorId] = cursorId;
             // Prevent SqfliteDarwinDB warning, we keep a result set open on purpose
             [db resultSetDidClose:resultSet];
+            LogDebug(@"Created cursor ID: %@, page size: %@", cursorId, cursorPageSize);
+        } else {
+            LogDebug(@"No more data for cursor");
         }
     }
     [operation success:results];
@@ -509,6 +530,7 @@ static SqflitePlugin *sharedInstance = nil;
     if (_log) {
         NSLog(@"opening %@ %@ %@", path, readOnly ? @" read-only" : @"", singleInstance ? @"" : @" new instance");
     }
+    LogInfo(@"Opening database: %@%@%@", path, readOnly ? @" (read-only)" : @"", singleInstance ? @"" : @" (new instance)");
     
     // Handle hot-restart for single instance
     // The dart code is killed but the native code remains
@@ -520,6 +542,7 @@ static SqflitePlugin *sharedInstance = nil;
                 if (_log) {
                     NSLog(@"re-opened %@singleInstance %@ id %@", database.inTransaction ? @"(in transaction) ": @"", path, database.databaseId);
                 }
+                LogInfo(@"Re-opened existing database: %@ (ID: %@)", path, database.databaseId);
                 result([SqflitePlugin makeOpenResult:database.databaseId recovered:true recoveredInTransaction:database.inTransaction]);
                 return;
             }
@@ -543,11 +566,13 @@ static SqflitePlugin *sharedInstance = nil;
     
     if (!success) {
         NSLog(@"Could not open db.");
+        LogError(@"Failed to open database at: %@", path);
         result([FlutterError errorWithCode:SqliteErrorCode
                                    message:[NSString stringWithFormat:@"%@ %@", _errorOpenFailed, path]
                                    details:nil]);
         return;
     }
+    LogInfo(@"Successfully opened database queue");
     
     // First call will be to prepare the database.
     // We turn on extended result code, allowing failure
@@ -579,6 +604,7 @@ static SqflitePlugin *sharedInstance = nil;
         }
     }
     
+    LogInfo(@"Database opened with ID: %@", databaseId);
     result([SqflitePlugin makeOpenResult: databaseId recovered:false recoveredInTransaction:false]);
 }
 
@@ -594,6 +620,7 @@ static SqflitePlugin *sharedInstance = nil;
     if (sqfliteHasSqlLogLevel(database.logLevel)) {
         NSLog(@"closing %@", database.path);
     }
+    LogInfo(@"Closing database ID: %@ at path: %@", database.databaseId, database.path);
     [self closeDatabase:database callback:^(){
         // We are in a background thread here.
         // resut itself is a wrapper posting on the main thread
@@ -610,6 +637,7 @@ static SqflitePlugin *sharedInstance = nil;
     if (sqfliteHasSqlLogLevel(database.logLevel)) {
         NSLog(@"closing %@", database.path);
     }
+    LogInfo(@"Closing database ID: %@ at path: %@", database.databaseId, database.path);
     @synchronized (self.mapLock) {
         [self.databaseMap removeObjectForKey:database.databaseId];
         if (database.singleInstance) {
@@ -679,6 +707,7 @@ static SqflitePlugin *sharedInstance = nil;
         [self closeDatabase:database callback:^() {
             // We are in a background thread here.
             // resut itself is a wrapper posting on the main thread
+            LogInfo(@"Deleting database file at: %@", path);
             [self deleteDatabaseFile:path];
             result(nil);
         }];
@@ -693,7 +722,9 @@ static SqflitePlugin *sharedInstance = nil;
     if (_log) {
         NSLog(@"databaseExists %@", path);
     }
-    return ([[NSFileManager defaultManager] fileExistsAtPath:path]);
+    bool exists = [[NSFileManager defaultManager] fileExistsAtPath:path];
+    LogDebug(@"Database %@ at path: %@", exists ? @"exists" : @"does not exist", path);
+    return exists;
 }
 
 //
@@ -813,6 +844,7 @@ static SqflitePlugin *sharedInstance = nil;
 }
 
 - (void)handleMethod:(FlutterMethodCall*)call result:(FlutterResult)result {
+    LogDebug(@"Handling method: %@", call.method);
 #if !TARGET_OS_IPHONE
     // result wrapper to post the result on the main thread
     // until background threads are supported for plugin services

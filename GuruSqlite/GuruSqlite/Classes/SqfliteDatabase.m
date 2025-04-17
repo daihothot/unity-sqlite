@@ -1,6 +1,7 @@
 #import "SqfliteDatabase.h"
 #import "SqflitePlugin.h"
 #import "SqfliteDarwinImport.h"
+#import "GuruSqliteLog.h"
 
 #import <sqlite3.h>
 
@@ -32,6 +33,7 @@ static int transactionIdForce = -1;
         lastCursorId = 0;
         lastTransactionId = 0;
         noTransactionOperationQueue = [NSMutableArray new];
+        LogDebug(@"SqfliteDatabase initialized with ID: %@", databaseId);
     }
     return self;
 }
@@ -45,8 +47,10 @@ static int transactionIdForce = -1;
 
 - (void)dbHandleError:(SqfliteDarwinDatabase*)db result:(FlutterResult)result {
     // handle error
+    NSString* errorMessage = [NSString stringWithFormat:@"%@", [db lastError]];
+    LogError(@"Database error: %@", errorMessage);
     result([FlutterError errorWithCode:SqliteErrorCode
-                               message:[NSString stringWithFormat:@"%@", [db lastError]]
+                               message:errorMessage
                                details:nil]);
 }
 
@@ -62,10 +66,15 @@ static int transactionIdForce = -1;
         }
     }
     
-    [operation error:([FlutterError errorWithCode:SqliteErrorCode
-                                          message:[NSString stringWithFormat:@"%@", [db lastError]]
-                                          details:details])];
+    NSString* errorMessage = [NSString stringWithFormat:@"%@", [db lastError]];
+    LogError(@"Database operation error: %@", errorMessage);
+    if (sql != nil) {
+        LogDebug(@"Failed SQL: %@", sql);
+    }
     
+    [operation error:([FlutterError errorWithCode:SqliteErrorCode
+                                          message:errorMessage
+                                          details:details])];
 }
 
 - (void)dbRunQueuedOperations:(SqfliteDarwinDatabase*)db {
@@ -75,6 +84,7 @@ static int transactionIdForce = -1;
         }
         SqfliteQueuedOperation* queuedOperation = [noTransactionOperationQueue objectAtIndex:0];
         [noTransactionOperationQueue removeObjectAtIndex:0];
+        LogDebug(@"Running queued operation from queue (remaining: %lu)", (unsigned long)[noTransactionOperationQueue count]);
         queuedOperation.handler(db, queuedOperation.operation);
     }
 }
@@ -85,6 +95,7 @@ static int transactionIdForce = -1;
         // ignore
         handler(db, operation);
     } else if (transactionId != nil && (transactionId.intValue == currentTransactionId.intValue || transactionId.intValue == transactionIdForce)) {
+        LogDebug(@"Executing operation in transaction ID: %@", currentTransactionId);
         handler(db, operation);
         if (currentTransactionId == nil && ![SqflitePlugin arrayIsEmpty:noTransactionOperationQueue]) {
             [self dbRunQueuedOperations:db];
@@ -94,8 +105,8 @@ static int transactionIdForce = -1;
         SqfliteQueuedOperation* queuedOperation = [SqfliteQueuedOperation new];
         queuedOperation.operation = operation;
         queuedOperation.handler = handler;
+        LogDebug(@"Operation queued for later execution (current transaction: %@)", currentTransactionId);
         [noTransactionOperationQueue addObject:queuedOperation];
-        
     }
 }
 - (bool)dbDoExecute:(SqfliteDarwinDatabase*)db operation:(SqfliteOperation*)operation {
@@ -114,6 +125,7 @@ static int transactionIdForce = -1;
         
         if (enteringTransaction) {
             self.currentTransactionId = [NSNumber numberWithInt:++self.lastTransactionId];
+            LogInfo(@"Entering transaction ID: %@", self.currentTransactionId);
         }
         if ([self dbExecuteOrError:db operation:operation]) {
             if (enteringTransaction) {
@@ -123,6 +135,7 @@ static int transactionIdForce = -1;
             } else {
                 bool leavingTransaction = inTransactionChange != nil && [inTransactionChange boolValue] == false;
                 if (leavingTransaction) {
+                    LogInfo(@"Leaving transaction ID: %@", self.currentTransactionId);
                     self.currentTransactionId = nil;
                 }
                 [operation success:[NSNull null]];
@@ -130,6 +143,7 @@ static int transactionIdForce = -1;
         } else {
             if (enteringTransaction) {
                 // On error revert change
+                LogWarning(@"Transaction failed, reverting transaction ID: %@", self.currentTransactionId);
                 self.currentTransactionId = nil;
             }
         }
@@ -144,6 +158,7 @@ static int transactionIdForce = -1;
     // Handle Hardcoded workarounds
     // Handle issue #525
     if ([SqfliteSqlPragmaSqliteDefensiveOff isEqualToString:sql]) {
+        LogDebug(@"Setting SQLITE_DBCONFIG_DEFENSIVE to OFF");
         sqlite3_db_config(db.sqliteHandle, SQLITE_DBCONFIG_DEFENSIVE, 0, 0);
     }
     
@@ -168,10 +183,11 @@ static int transactionIdForce = -1;
     
     // handle error
     if (!success) {
+        LogError(@"SQL execution failed");
         [self dbHandleError:db operation:operation];
         return false;
-        
     }
+    LogDebug(@"SQL execution succeeded");
     
     // We enter the transaction on success
     if (inTransaction != nil) {
@@ -207,6 +223,7 @@ static int transactionIdForce = -1;
         if (sqfliteHasSqlLogLevel(self.logLevel)) {
             NSLog(@"no changes");
         }
+        LogDebug(@"Insert operation - no changes (possible ON CONFLICT IGNORE)");
         [operation success:[NSNull null]];
         return true;
     }
@@ -214,6 +231,7 @@ static int transactionIdForce = -1;
     if (sqfliteHasSqlLogLevel(self.logLevel)) {
         NSLog(@"inserted %@", @(insertedId));
     }
+    LogDebug(@"Inserted row ID: %lld", insertedId);
     [operation success:(@(insertedId))];
     return true;
 }
@@ -235,6 +253,7 @@ static int transactionIdForce = -1;
     if (sqfliteHasSqlLogLevel(self.logLevel)) {
         NSLog(@"changed %@", @(changes));
     }
+    LogDebug(@"Updated rows: %d", changes);
     [operation success:(@(changes))];
     return true;
 }
@@ -271,9 +290,11 @@ static int transactionIdForce = -1;
     
     // handle error
     if ([db hadError]) {
+        LogError(@"Query execution failed");
         [self dbHandleError:db operation:operation];
         return false;
     }
+    LogDebug(@"Query executed successfully");
     
     NSMutableDictionary* results = [SqflitePlugin resultSetToResults:resultSet cursorPageSize:cursorPageSize];
     
@@ -286,6 +307,7 @@ static int transactionIdForce = -1;
             cursor.pageSize = cursorPageSize;
             cursor.resultSet = resultSet;
             self.cursorMap[cursorId] = cursor;
+            LogDebug(@"Created cursor ID: %@ with page size: %@", cursorId, cursorPageSize);
             // Notify cursor support in the result
             results[_paramCursorId] = cursorId;
             // Prevent SqfliteDarwinDB warning, we keep a result set open on purpose
@@ -309,8 +331,10 @@ static int transactionIdForce = -1;
     NSNumber* cancelValue = [operation getArgument:_paramCancel];
     bool cancel = [cancelValue boolValue] == true;
     if (sqfliteHasVerboseLogLevel(self.logLevel))
-    {            NSLog(@"queryCursorNext %@%s", cursorId, cancel ? " (cancel)" : "");
+    {
+        NSLog(@"queryCursorNext %@%s", cursorId, cancel ? " (cancel)" : "");
     }
+    LogDebug(@"Query cursor next for cursor ID: %@%@", cursorId, cancel ? @" (cancel requested)" : @"");
     
     if (cancel) {
         [self closeCursorById:cursorId];
@@ -320,6 +344,7 @@ static int transactionIdForce = -1;
         SqfliteCursor* cursor = self.cursorMap[cursorId];
         if (cursor == nil) {
             NSLog(@"cursor %@ not found.", cursorId);
+            LogError(@"Cursor not found with ID: %@", cursorId);
             [operation success:[FlutterError errorWithCode:SqliteErrorCode
                                                    message: @"Cursor not found"
                                                    details:nil]];
@@ -334,7 +359,9 @@ static int transactionIdForce = -1;
             results[_paramCursorId] = cursorId;
             // Prevent SqfliteDarwinDB warning, we keep a result set open on purpose
             [db resultSetDidClose:resultSet];
+            LogDebug(@"Cursor has more data - cursor ID: %@", cursorId);
         } else {
+            LogDebug(@"Cursor reached end - closing cursor ID: %@", cursorId);
             [self closeCursor:cursor];
         }
         [operation success:results];
@@ -351,6 +378,7 @@ static int transactionIdForce = -1;
     
     NSArray* operations = [mainOperation getArgument:_paramOperations];
     NSMutableArray* operationResults = [NSMutableArray new];
+    LogDebug(@"Starting batch execution with %lu operations", (unsigned long)[operations count]);
     for (NSDictionary* dictionary in operations) {
         // do something with object
         
@@ -396,6 +424,7 @@ static int transactionIdForce = -1;
                 return;
             }
         } else {
+            LogError(@"Unsupported batch method: %@", method);
             [mainOperation success:[FlutterError errorWithCode:SqfliteErrorBadParam
                                                        message:[NSString stringWithFormat:@"Batch method '%@' not supported", method]
                                                        details:nil]];
@@ -403,6 +432,7 @@ static int transactionIdForce = -1;
         }
     }
     
+    LogDebug(@"Batch execution completed with %lu results", (unsigned long)[operationResults count]);
     if (noResult) {
         [mainOperation success:[NSNull null]];
     } else {
@@ -422,6 +452,7 @@ static int transactionIdForce = -1;
     if (sqfliteHasVerboseLogLevel(logLevel)) {
         NSLog(@"closing cursor %@", cursorId);
     }
+    LogDebug(@"Closing cursor ID: %@", cursorId);
     [cursorMap removeObjectForKey:cursorId];
     [cursor.resultSet close];
 }
