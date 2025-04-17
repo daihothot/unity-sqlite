@@ -7,57 +7,22 @@
 
 #import "UnityFlutterMock.h"
 #import "../SqflitePlugin.h"
+#import "../GuruSqliteLog.h"
 
-// 日志级别定义
-typedef enum {
-    LogLevelNone = 0,   // 不输出任何日志
-    LogLevelError = 1,  // 只输出错误
-    LogLevelWarning = 2,// 输出警告和错误
-    LogLevelInfo = 3,   // 输出信息、警告和错误
-    LogLevelDebug = 4   // 输出所有调试信息
-} LogLevel;
-
-// 当前日志级别（默认为Info）
-static LogLevel currentLogLevel = LogLevelInfo;
-
-// 日志函数
-void LogError(NSString *format, ...) {
-    if (currentLogLevel >= LogLevelError) {
-        va_list args;
-        va_start(args, format);
-        NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-        NSLog(@"[GuruSqlite][错误] %@", message);
-        va_end(args);
-    }
-}
-
-void LogWarning(NSString *format, ...) {
-    if (currentLogLevel >= LogLevelWarning) {
-        va_list args;
-        va_start(args, format);
-        NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-        NSLog(@"[GuruSqlite][警告] %@", message);
-        va_end(args);
-    }
-}
-
-void LogInfo(NSString *format, ...) {
-    if (currentLogLevel >= LogLevelInfo) {
-        va_list args;
-        va_start(args, format);
-        NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-        NSLog(@"[GuruSqlite][信息] %@", message);
-        va_end(args);
-    }
-}
-
-void LogDebug(NSString *format, ...) {
-    if (currentLogLevel >= LogLevelDebug) {
-        va_list args;
-        va_start(args, format);
-        NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-        NSLog(@"[GuruSqlite][调试] %@", message);
-        va_end(args);
+// 格式化JSON对象为易读字符串
+NSString* FormatJSONObject(id obj) {
+    if (!obj) return @"null";
+    if ([obj isKindOfClass:[NSString class]]) return obj;
+    
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:obj
+                                                       options:NSJSONWritingPrettyPrinted
+                                                         error:&error];
+    if (jsonData) {
+        NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+        return jsonString;
+    } else {
+        return [NSString stringWithFormat:@"<无法序列化的对象: %@>", [obj description]];
     }
 }
 
@@ -220,15 +185,22 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
         
         // Call the plugin's handleMethod
         LogInfo(@"调用插件方法: %@", call.method);
-        [plugin handleMethod:call result:result];
-        LogInfo(@"调用方法完成 <== callId: %d, 方法: %@", callId, method);
+        @try {
+            [plugin handleMethod:call result:result];
+            LogInfo(@"调用方法完成 <== callId: %d, 方法: %@", callId, method);
+        } @catch (NSException *exception) {
+            LogError(@"调用方法异常 - 名称: %@, 原因: %@", exception.name, exception.reason);
+            if (exception.userInfo) {
+                LogDebug(@"异常详情: %@", exception.userInfo);
+            }
+            if (onMethodResultCallback) {
+                NSString *errorMessage = [NSString stringWithFormat:@"Exception: %@ - %@", exception.name, exception.reason];
+                onMethodResultCallback((__bridge const void *)(errorMessage));
+            }
+        } @finally {
+            LogDebug(@"方法调用处理完成");
+        }
     }
 }
 
-// 设置日志级别的C函数，方便外部调用
-void SetGuruSqliteLogLevel(int level) {
-    if (level >= LogLevelNone && level <= LogLevelDebug) {
-        currentLogLevel = level;
-        NSLog(@"[GuruSqlite] 设置日志级别为: %d", level);
-    }
-}
+// This function is now defined in GuruSqliteLog.m
