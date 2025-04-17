@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 
+Sample Dependencies.xml:
+    https://github.com/googlesamples/unity-jar-resolver/blob/master/sample/Assets/ExternalDependencyManager/Editor/SampleDependencies.xml
+-->
+<dependencies>
+    <androidPackages>
+    </androidPackages>
+    <iosPods>
+        <iosPod name="GuruSqlite" bitcodeEnabled="false" path="GuruSqlite/" />
+    </iosPods>
+</dependencies>
