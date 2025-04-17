@@ -137,7 +137,7 @@ extern "C" {
 
 typedef void (*MethodResultCallback)(const char* result);
 
-void invokeMethod(int callId, const char* methodName, const char* jsonArguments, MethodResultCallback onMethodResultCallback);
+void InvokeMethod(int callId, const char* methodName, const char* jsonArguments, MethodResultCallback onMethodResultCallback);
 
 #ifdef __cplusplus
 }

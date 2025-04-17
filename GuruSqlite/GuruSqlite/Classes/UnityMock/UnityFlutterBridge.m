@@ -90,11 +90,13 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
 }
 
 // The C function that will be called from Unity
-void invokeMethod(int callId, const char* methodName, const char* jsonArguments, MethodResultCallback onMethodResultCallback) {
+void InvokeMethod(int callId, const char* methodName, const char* jsonArguments, MethodResultCallback onMethodResultCallback) {
     @autoreleasepool {
         // Convert C strings to NSString
         NSString *method = [NSString stringWithUTF8String:methodName];
         NSString *argsJson = [NSString stringWithUTF8String:jsonArguments];
+        
+        NSLog(@"Invoke Method, callId:%d, methodName:%s, jsonArguments:%s", callId, methodName, jsonArguments);
         
         // Parse JSON arguments
         NSError *jsonError;
