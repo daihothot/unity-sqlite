@@ -33,7 +33,7 @@ static int transactionIdForce = -1;
         lastCursorId = 0;
         lastTransactionId = 0;
         noTransactionOperationQueue = [NSMutableArray new];
-        LogDebug(@"SqfliteDatabase initialized with ID: %@", databaseId);
+        LogDebug(@"SqfliteDatabase initialized - ID will be assigned later");
     }
     return self;
 }

@@ -9,6 +9,7 @@
 #import "SqfliteOperation.h"
 #import "SqflitePlugin.h"
 #import "SqfliteDarwinImport.h"
+#import "GuruSqliteLog.h"
 
 // Abstract
 @implementation SqfliteOperation
@@ -29,9 +30,13 @@
 - (bool)getContinueOnError {
     return false;
 }
-- (void)success:(NSObject*)results {}
+- (void)success:(NSObject*)results {
+    LogDebug(@"Operation succeeded (base class - override not called)");
+}
 
-- (void)error:(NSObject*)error {}
+- (void)error:(NSObject*)error {
+    LogError(@"Operation failed (base class - override not called): %@", error);
+}
 
 // To override
 - (id)getArgument:(NSString*)key {
@@ -48,8 +53,10 @@
     // It might be NSNull (for begin transaction)
     id rawId = [self getArgument:SqfliteParamTransactionId];
     if ([rawId isKindOfClass:[NSNumber class]]) {
+        LogDebug(@"Transaction ID found: %@", rawId);
         return rawId;
     }
+    LogDebug(@"No valid transaction ID found");
     return nil;
 }
 
@@ -89,10 +96,12 @@
 }
 
 - (void)success:(NSObject*)results {
+    LogDebug(@"Batch operation succeeded");
     self.results = results;
 }
 
 - (void)error:(FlutterError*)error {
+    LogError(@"Batch operation failed: %@ - %@", error.code, error.message);
     self.error = error;
 }
 
@@ -173,10 +182,21 @@
 
 
 - (void)success:(NSObject*)results {
+    LogDebug(@"Method call operation succeeded: %@", [self getMethod]);
     flutterResult(results);
 }
 
 - (void)error:(NSObject*)error {
+    NSString* method = [self getMethod];
+    NSString* sql = [self getSql];
+    if ([error isKindOfClass:[FlutterError class]]) {
+        FlutterError* flutterError = (FlutterError*)error;
+        LogError(@"Method call operation failed: %@ - SQL: %@, Error: %@ - %@",
+                method, sql ?: @"none", flutterError.code, flutterError.message);
+    } else {
+        LogError(@"Method call operation failed: %@ - SQL: %@, Error: %@",
+                method, sql ?: @"none", error);
+    }
     flutterResult(error);
 }
 

@@ -592,6 +592,7 @@ static SqflitePlugin *sharedInstance = nil;
         database.databaseId = databaseId;
         database.path = path;
         database.logLevel = logLevel;
+        LogDebug(@"Database ID assigned: %@ at path: %@", databaseId, path);
         self.databaseMap[databaseId] = database;
         // To handle hot-restart recovery
         if (singleInstance) {

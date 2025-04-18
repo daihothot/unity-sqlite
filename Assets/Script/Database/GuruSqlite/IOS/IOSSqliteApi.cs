@@ -17,7 +17,9 @@ namespace GuruSqlite
 
     internal class MethodRequest
     {
+        [JsonProperty("id")]
         internal int CallId { get; private init; }
+        
         internal MethodCall MethodCall { get; private init; }
         internal SqliteResultCallback<object> MethodResult;
         
@@ -91,16 +93,17 @@ namespace GuruSqlite
         public static void OnMethodResult(IntPtr resultPtr)
         {
             var resultStr = Marshal.PtrToStringAnsi(resultPtr);
-            var methodRequest = JsonConvert.DeserializeObject<MethodRequest>(resultStr ?? "");
-            var callId = methodRequest?.CallId;
-            if (callId == null)
+            Log.D("OnMethodResult: " + resultStr);
+
+            var result = IOSSqliteResult.FromJson(resultStr ?? "");
+            var callId = result?.CallId;
+            
+            if (callId <= 0)
             {
-                Log.W("OnMethodResult: callId is null");
-                return;
+                throw new ArgumentException("CallId is invalid or null");
             }
 
             var id = callId ?? 0;
-
             MethodRequest? pendingRequest = null;
             lock (_lock)
             {
