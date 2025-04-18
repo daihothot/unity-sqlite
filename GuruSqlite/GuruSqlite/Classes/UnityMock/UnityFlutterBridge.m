@@ -45,7 +45,7 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
                 if (jsonData) {
                     NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
                     LogDebug(@"错误JSON序列化成功: %@", jsonString);
-                    onMethodResultCallback((__bridge const void *)(jsonString));
+                    onMethodResultCallback([jsonString UTF8String]);
                 } else {
                     LogError(@"错误JSON序列化失败: %@", jsonError);
                     onMethodResultCallback("Error serializing FlutterError");
@@ -54,12 +54,12 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
             else if ([result isKindOfClass:[NSString class]]) {
                 // For strings, pass them directly
                 LogDebug(@"回调返回字符串: %@", result);
-                onMethodResultCallback((__bridge const void *)(result));
+                onMethodResultCallback([result UTF8String]);
             }
             else if ([result isKindOfClass:[NSNumber class]]) {
                 // For numbers, convert to string
                 LogDebug(@"回调返回数字: %@", result);
-                onMethodResultCallback((__bridge const void *)([result stringValue]));
+                onMethodResultCallback([result UTF8String]);
             }
             else if ([result isKindOfClass:[NSDictionary class]] || [result isKindOfClass:[NSArray class]]) {
                 // For dictionaries and arrays, convert to JSON
@@ -78,7 +78,7 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
                 NSData *jsonData = [NSJSONSerialization dataWithJSONObject:result options:0 error:&jsonError];
                 if (jsonData) {
                     NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-                    onMethodResultCallback((__bridge const void *)(jsonString));
+                    onMethodResultCallback([jsonString UTF8String]);
                 } else {
                     LogError(@"对象JSON序列化失败: %@", jsonError);
                     onMethodResultCallback("Error serializing result to JSON");
@@ -92,7 +92,7 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
             else {
                 // For other types, convert to description
                 LogDebug(@"回调返回未知类型: %@", [result class]);
-                onMethodResultCallback((__bridge const void *)([result description]));
+                onMethodResultCallback([result UTF8String]);
             }
         }
         
@@ -138,7 +138,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
                 LogError(@"解析JSON参数错误: %@", jsonError);
                 if (onMethodResultCallback) {
                     NSString *errorMsg = [NSString stringWithFormat:@"Error parsing JSON arguments: %@", jsonError.localizedDescription];
-                    onMethodResultCallback((__bridge const void *)(errorMsg));
+                    onMethodResultCallback([errorMsg UTF8String]);
                 }
                 return;
             } else {
@@ -178,7 +178,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
             }
             if (onMethodResultCallback) {
                 NSString *errorMessage = [NSString stringWithFormat:@"Exception: %@ - %@", exception.name, exception.reason];
-                onMethodResultCallback((__bridge const void *)(errorMessage));
+                onMethodResultCallback([errorMessage UTF8String]);
             }
         } @finally {
             LogDebug(@"方法调用处理完成");

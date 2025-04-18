@@ -9,10 +9,17 @@ public class Launcher : MonoBehaviour
     // Start is called before the first frame update
     async void Start()
     {
-        DataBaseMock db = new DataBaseMock();
-        await db.InitDatabase();
+        try
+        {
+            DataBaseMock db = new DataBaseMock();
+            await db.InitDatabase();
 
-        Log.D("Database initialized successfully.", "Database");
+            Log.D("Database initialized successfully.", "Database");
+        }
+        catch (System.Exception e)
+        {
+            Log.E("Database initialization failed: " + e.Message, "Database");
+        }
     }
 
     // Update is called once per frame

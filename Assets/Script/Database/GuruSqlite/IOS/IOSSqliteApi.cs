@@ -19,19 +19,19 @@ namespace GuruSqlite
     {
         [JsonProperty("id")]
         internal int CallId { get; private init; }
-        
+
         internal MethodCall MethodCall { get; private init; }
         internal SqliteResultCallback<object> MethodResult;
-        
+
         public MethodRequest(int callId, MethodCall methodCall)
         {
             CallId = callId;
             MethodCall = methodCall;
             MethodResult = new SqliteResultCallback<object>();
         }
-        
+
     }
-    
+
     internal class IOSSqliteResult
     {
         [JsonProperty("id", DefaultValueHandling = DefaultValueHandling.Populate)]
@@ -51,7 +51,7 @@ namespace GuruSqlite
             return JsonConvert.DeserializeObject<IOSSqliteResult>(json);
         }
     }
-    
+
     public class IOSSqliteApi : IGuruSqliteApi
     {
 
@@ -61,14 +61,14 @@ namespace GuruSqlite
         {
             return Interlocked.Increment(ref _callIdPools);
         }
-        
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void MethodResultCallback(IntPtr result);
 
         // 声明外部方法
         [DllImport("__Internal")]
         private static extern void InvokeMethod(int callId, string method, string arguments, MethodResultCallback onMethodResultCallback);
-        
+
         private static readonly Dictionary<int, MethodRequest> _methodRequests = new();
         private static readonly object _lock = new object();
 
@@ -88,39 +88,58 @@ namespace GuruSqlite
             return request.MethodResult.Tcs.Task.ContinueWith((result) => (T)(object)result);
         }
 
-        
+
         [MonoPInvokeCallback(typeof(MethodResultCallback))]
         public static void OnMethodResult(IntPtr resultPtr)
         {
-            var resultStr = Marshal.PtrToStringAnsi(resultPtr);
-            Log.D("OnMethodResult: " + resultStr);
-
-            var result = IOSSqliteResult.FromJson(resultStr ?? "");
-            var callId = result?.CallId;
-            
-            if (callId <= 0)
+            // 检查指针是否为空
+            if (resultPtr == IntPtr.Zero)
             {
-                throw new ArgumentException("CallId is invalid or null");
+                throw new ArgumentNullException(nameof(resultPtr), "收到空指针");
             }
 
-            var id = callId ?? 0;
+            string? resultStr = null;
+            IOSSqliteResult? result = null;
+            int? callId = null;
             MethodRequest? pendingRequest = null;
+
+           // 转换指针到字符串
+            resultStr = Marshal.PtrToStringAnsi(resultPtr);
+            Log.D("OnMethodResult: " + resultStr);
+
+            if (string.IsNullOrEmpty(resultStr))
+            {
+                throw new ArgumentNullException(nameof(resultStr), "收到空结果字符串");
+            }
+
+            // 解析JSON
+            result = IOSSqliteResult.FromJson(resultStr);
+            if (result == null)
+            {
+                throw new JsonException("无法解析结果JSON");
+            }
+
+            callId = result.CallId;
+            if (callId <= 0)
+            {
+                throw new ArgumentException($"CallId无效: {callId}");
+            }
+
+            // 查找并处理请求
             lock (_lock)
             {
-                if (_methodRequests.Remove(id, out var request))
+                if (_methodRequests.Remove(callId.Value, out var request))
                 {
                     pendingRequest = request;
                 }
+                else
+                {
+                    Log.W($"OnMethodResult: 未找到callId {callId}的待处理请求");
+                }
             }
 
-            pendingRequest?.MethodResult.OnResult(resultStr);
-
+            pendingRequest?.MethodResult.OnResult(result.Arguments);
         }
-
-
     }
-    
-
-
 }
 #endif
