@@ -34,16 +34,16 @@ namespace GuruSqlite
 
     internal class IOSSqliteResult
     {
-        [JsonProperty("id", DefaultValueHandling = DefaultValueHandling.Populate)]
+        [JsonProperty("callId", DefaultValueHandling = DefaultValueHandling.Populate)]
         public int CallId { get; set; } = -1;
 
-        [JsonProperty("args", DefaultValueHandling = DefaultValueHandling.Populate)]
-        public object Arguments { get; set; }
+        [JsonProperty("data", DefaultValueHandling = DefaultValueHandling.Populate)]
+        public object Data { get; set; }
 
-        public IOSSqliteResult(int callId = -1, object? arguments = null)
+        public IOSSqliteResult(int callId = -1, object? data = null)
         {
             CallId = callId;
-            Arguments = arguments ?? new Dictionary<string, object>();
+            Data = data ?? new Dictionary<string, object>();
         }
 
         public static IOSSqliteResult? FromJson(string json)
@@ -77,7 +77,7 @@ namespace GuruSqlite
             var callId = BuildCallId();
             var args = JsonConvert.SerializeObject(arguments);
             var methodCall = new MethodCall(method, arguments);
-            InvokeMethod(callId, methodCall.Method, args, OnMethodResult);
+
             MethodRequest? request;
             lock (_lock)
             {
@@ -85,6 +85,7 @@ namespace GuruSqlite
                 _methodRequests[callId] = request;
             }
 
+            InvokeMethod(callId, methodCall.Method, args, OnMethodResult);
             return request.MethodResult.Tcs.Task.ContinueWith((result) => (T)(object)result);
         }
 
@@ -103,7 +104,7 @@ namespace GuruSqlite
             int? callId = null;
             MethodRequest? pendingRequest = null;
 
-           // 转换指针到字符串
+            // 转换指针到字符串
             resultStr = Marshal.PtrToStringAnsi(resultPtr);
             Log.D("OnMethodResult: " + resultStr);
 
@@ -138,7 +139,7 @@ namespace GuruSqlite
                 }
             }
 
-            pendingRequest?.MethodResult.OnResult(result.Arguments);
+            pendingRequest?.MethodResult.OnResult(result.Data);
         }
     }
 }

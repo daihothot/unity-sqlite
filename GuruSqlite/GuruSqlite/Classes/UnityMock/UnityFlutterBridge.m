@@ -19,6 +19,33 @@ static void InitializeResultCallbacks(void) {
     resultCallbacks = [NSMutableDictionary dictionary];
 }
 
+// 包裹结果数据，添加callId
+const char* WrapResultWithCallId(int callId, const char* data) {
+    LogDebug(@"包裹结果数据, callId: %d", callId);
+    
+    NSString *dataStr = [NSString stringWithUTF8String:data];
+    
+    // 创建包含callId和data的字典
+    NSDictionary *wrappedResult = @{
+        @"callId": @(callId),
+        @"data": dataStr
+    };
+    
+    // 序列化为JSON
+    NSError *jsonError;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:wrappedResult options:0 error:&jsonError];
+    if (jsonData) {
+        NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+        LogDebug(@"包裹后的结果: %@", jsonString);
+        return [jsonString UTF8String];
+    } else {
+        LogError(@"包裹结果JSON序列化失败: %@", jsonError);
+        // 使用直接的字符串格式化返回结果
+        NSString *errorStr = [NSString stringWithFormat:@"{\"callId\":%d,\"data\":\"Error wrapping result\"}", callId];
+        return [errorStr UTF8String];
+    }
+}
+
 // Convert C result callback to Objective-C block
 FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMethodResultCallback) {
     LogDebug(@"创建结果回调Block, callId: %d", callId);
@@ -45,21 +72,22 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
                 if (jsonData) {
                     NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
                     LogDebug(@"错误JSON序列化成功: %@", jsonString);
-                    onMethodResultCallback([jsonString UTF8String]);
+                    onMethodResultCallback(WrapResultWithCallId(callId, [jsonString UTF8String]));
                 } else {
                     LogError(@"错误JSON序列化失败: %@", jsonError);
-                    onMethodResultCallback("Error serializing FlutterError");
+                    NSString *errorMsg = @"Error serializing FlutterError";
+                    onMethodResultCallback(WrapResultWithCallId(callId, [errorMsg UTF8String]));
                 }
             } 
             else if ([result isKindOfClass:[NSString class]]) {
                 // For strings, pass them directly
                 LogDebug(@"回调返回字符串: %@", result);
-                onMethodResultCallback([result UTF8String]);
+                onMethodResultCallback(WrapResultWithCallId(callId, [result UTF8String]));
             }
             else if ([result isKindOfClass:[NSNumber class]]) {
                 // For numbers, convert to string
                 LogDebug(@"回调返回数字: %@", result);
-                onMethodResultCallback([result UTF8String]);
+                onMethodResultCallback(WrapResultWithCallId(callId, [[result stringValue] UTF8String]));
             }
             else if ([result isKindOfClass:[NSDictionary class]] || [result isKindOfClass:[NSArray class]]) {
                 // For dictionaries and arrays, convert to JSON
@@ -78,21 +106,22 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
                 NSData *jsonData = [NSJSONSerialization dataWithJSONObject:result options:0 error:&jsonError];
                 if (jsonData) {
                     NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-                    onMethodResultCallback([jsonString UTF8String]);
+                    onMethodResultCallback(WrapResultWithCallId(callId, [jsonString UTF8String]));
                 } else {
                     LogError(@"对象JSON序列化失败: %@", jsonError);
-                    onMethodResultCallback("Error serializing result to JSON");
+                    NSString *errorMsg = @"Error serializing result to JSON";
+                    onMethodResultCallback(WrapResultWithCallId(callId, [errorMsg UTF8String]));
                 }
             }
             else if (result == nil || result == [NSNull null]) {
                 // For nil or NSNull, return null string
                 LogDebug(@"回调返回null");
-                onMethodResultCallback("null");
+                onMethodResultCallback(WrapResultWithCallId(callId, "null"));
             }
             else {
                 // For other types, convert to description
                 LogDebug(@"回调返回未知类型: %@", [result class]);
-                onMethodResultCallback([result UTF8String]);
+                onMethodResultCallback(WrapResultWithCallId(callId, [[result description] UTF8String]));
             }
         }
         
@@ -138,7 +167,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
                 LogError(@"解析JSON参数错误: %@", jsonError);
                 if (onMethodResultCallback) {
                     NSString *errorMsg = [NSString stringWithFormat:@"Error parsing JSON arguments: %@", jsonError.localizedDescription];
-                    onMethodResultCallback([errorMsg UTF8String]);
+                    onMethodResultCallback(WrapResultWithCallId(callId, [errorMsg UTF8String]));
                 }
                 return;
             } else {
@@ -161,7 +190,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
         if (!plugin) {
             LogError(@"SqflitePlugin实例未找到");
             if (onMethodResultCallback) {
-                onMethodResultCallback("SqflitePlugin instance not found");
+                onMethodResultCallback(WrapResultWithCallId(callId, "SqflitePlugin instance not found"));
             }
             return;
         }
@@ -178,7 +207,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
             }
             if (onMethodResultCallback) {
                 NSString *errorMessage = [NSString stringWithFormat:@"Exception: %@ - %@", exception.name, exception.reason];
-                onMethodResultCallback([errorMessage UTF8String]);
+                onMethodResultCallback(WrapResultWithCallId(callId, [errorMessage UTF8String]));
             }
         } @finally {
             LogDebug(@"方法调用处理完成");
@@ -187,3 +216,4 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
 }
 
 // This function is now defined in GuruSqliteLog.m
+
