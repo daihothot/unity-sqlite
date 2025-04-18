@@ -94,7 +94,7 @@ namespace GuruSqlite
                     return intResult;
                 case Dictionary<string, object> resultMap:
                 {
-                    int? id = resultMap.TryGetValue(GuruSqliteConstants.ParamId, out var value) ? (int)value : null;
+                    int? id = resultMap.TryGetValue(GuruSqliteConstants.ParamId, out var value) ? Convert.ToInt32(value)  : null;
 
                     // Recover means we found an instance in the native world
                     var recoveredInTransaction = resultMap.ContainsKey(GuruSqliteConstants.ParamRecoveredInTransaction) &&
