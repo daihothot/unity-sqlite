@@ -1,4 +1,3 @@
-#if UNITY_ANDROID
 #nullable enable
 using System;
 using System.Collections;
@@ -305,4 +304,3 @@ namespace GuruSqlite
         }
     }
 }
-#endif

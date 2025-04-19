@@ -60,7 +60,9 @@ namespace GuruSqlite
         void OnResult(object? result);
         void OnError(string code, string message, object? details);
         void OnNotImplemented();
+        
     }
+    
 
     public class SqliteResultCallback<T> : IResultCallback
     {
@@ -161,70 +163,6 @@ namespace GuruSqlite
         {
             Log.W($"OnNotImplemented");
             Tcs.TrySetException(new NotImplementedException());
-        }
-    }
-    
-    public class SqliteResult
-    {
-        private readonly IResultCallback callback;
-
-        public SqliteResult(IResultCallback callback)
-        {
-            this.callback = callback;
-        }
-
-        private void Success(object result)
-        {
-            callback.OnResult(result);
-        }
-
-        private void Error(string errorCode, string errorMessage, object errorDetails)
-        {
-            callback.OnError(errorCode, errorMessage, errorDetails);
-        }
-
-        public void NotImplemented()
-        {
-            callback.OnNotImplemented();
-        }
-
-        public void SqliteQuerySuccess(List<Dictionary<string, object>> rows)
-        {
-            var result = new Dictionary<string, object>
-            {
-                { "rows", rows },
-                { "rowCount", rows.Count }
-            };
-            Success(result);
-        }
-
-        public void SqliteExecuteSuccess(int rowsAffected, long? insertId)
-        {
-            var result = new Dictionary<string, object>
-            {
-                { "rowsAffected", rowsAffected }
-            };
-
-            if (insertId.HasValue)
-            {
-                result["insertId"] = insertId.Value;
-            }
-
-            Success(result);
-        }
-
-        public void SqliteError(string code, string message)
-        {
-            Error("sqlite_error", message, code);
-        }
-
-        public void SqliteTransactionResult(bool successful)
-        {
-            var result = new Dictionary<string, object>
-            {
-                { "transactionSuccessful", successful }
-            };
-            Success(result);
         }
     }
 }

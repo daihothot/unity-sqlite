@@ -165,6 +165,9 @@ public static class GuruSqliteConstants
     /// Integer.
     /// </summary>
     public const string ParamCursorPageSize = "cursorPageSize";
+    
+    public const string ErrorBadParam = "bad_param"; // internal only
+    public const string ErrorOpenFailed = "open_failed"; 
 
     /// <summary>
     /// SQL query cursor next cancel parameter.

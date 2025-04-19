@@ -8,7 +8,6 @@ using UnityEngine;
 namespace GuruSqlite
 {
 
-
     /// <summary>
     /// SQLite数据库工厂实现
     /// </summary>
@@ -18,14 +17,16 @@ namespace GuruSqlite
         private string? _databasesPath;
 
 
-        private static readonly Lazy<IGuruSqliteApi> SqliteApi = new(() => new IOSSqliteApi()
-//             {
-// #if UNITY_ANDROID && !UNITY_EDITOR
-//             return new AndroidSqliteApi();
-// #else
-//                  return new MockSqliteApi();
-// #endif
-//             }
+        private static readonly Lazy<IGuruSqliteApi> SqliteApi = new(() => 
+             {
+#if UNITY_ANDROID && !UNITY_EDITOR
+             return new AndroidSqliteApi();
+#elif UNITY_IOS && !UNITY_EDITOR
+             return new IOSSqliteApi();
+#else 
+             return new EditorSqliteApi();
+#endif
+             }
         );
         
         /// <summary>
@@ -255,9 +256,7 @@ namespace GuruSqlite
         {
             if (IsOpen) return _database;
             var database = _factory.NewDatabase(this, _path);
-#if !UNITY_EDITOR
             await database.DoOpen(_options);
-#endif
             _database = database;
 
             return _database;
