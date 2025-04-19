@@ -7,6 +7,6 @@ Sample Dependencies.xml:
     <androidPackages>
     </androidPackages>
     <iosPods>
-        <iosPod name="GuruSqlite" bitcodeEnabled="false" path="GuruSqlite/" />
+        <iosPod name="GuruSqlite" bitcodeEnabled="false" path="Packages/com.guru.artifact.gurusqlite/NativeLibraries~/GuruSqlite" />
     </iosPods>
 </dependencies>
