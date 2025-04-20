@@ -136,7 +136,7 @@ namespace GuruSqlite
             else
             {
                 var handleTimeoutWarning = (LockWarningDuration != null && LockWarningCallback != null);
-                UniTaskCompletionSource<object?> timeoutCompleter = null;
+                UniTaskCompletionSource<object?>? timeoutCompleter = null;
                 if (handleTimeoutWarning)
                 {
                     timeoutCompleter = new UniTaskCompletionSource<object?>();

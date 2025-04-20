@@ -460,7 +460,7 @@ namespace GuruSqlite
         /// <summary>
         /// 释放资源
         /// </summary>
-        public void Dispose()
+        public new void Dispose()
         {
             Close().Forget();
         }

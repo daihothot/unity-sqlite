@@ -213,9 +213,9 @@ namespace GuruSqlite
         /// <summary>
         /// 调用原生方法
         /// </summary>
-        internal UniTask<T?> InvokeMethod<T>(string method, object? arguments)
+        internal UniTask<T> InvokeMethod<T>(string method, object? arguments)
         {
-            return SqliteApi.Value.InvokeMethod<T?>(method, arguments);
+            return SqliteApi.Value.InvokeMethod<T>(method, arguments);
         }
     }
 
@@ -254,7 +254,7 @@ namespace GuruSqlite
         /// </summary>
         public async UniTask<SqliteDatabase> OpenDatabase()
         {
-            if (IsOpen) return _database;
+            if (IsOpen && _database != null) return _database;
             var database = _factory.NewDatabase(this, _path);
             await database.DoOpen(_options);
             _database = database;

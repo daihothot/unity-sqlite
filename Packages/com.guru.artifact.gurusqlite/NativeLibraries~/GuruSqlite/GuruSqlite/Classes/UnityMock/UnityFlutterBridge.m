@@ -101,12 +101,14 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
                     LogDebug(@"回调返回%@: %@", type, printString);
                 }
                 
-                // 实际序列化用于回调
+                // 直接将结果对象作为Data字段，避免双重JSON序列化
+                NSDictionary *resultDict = @{@"callId": @(callId), @"data": result};
                 NSError *jsonError;
-                NSData *jsonData = [NSJSONSerialization dataWithJSONObject:result options:0 error:&jsonError];
+                NSData *jsonData = [NSJSONSerialization dataWithJSONObject:resultDict options:0 error:&jsonError];
                 if (jsonData) {
                     NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-                    onMethodResultCallback(WrapResultWithCallId(callId, [jsonString UTF8String]));
+                    LogDebug(@"返回完整JSON: %@", jsonString);
+                    onMethodResultCallback([jsonString UTF8String]);
                 } else {
                     LogError(@"对象JSON序列化失败: %@", jsonError);
                     NSString *errorMsg = @"Error serializing result to JSON";
