@@ -19,16 +19,14 @@ static void InitializeResultCallbacks(void) {
     resultCallbacks = [NSMutableDictionary dictionary];
 }
 
-// 包裹结果数据，添加callId
-const char* WrapResultWithCallId(int callId, const char* data) {
-    LogDebug(@"包裹结果数据, callId: %d", callId);
-    
-    NSString *dataStr = [NSString stringWithUTF8String:data];
+// 包裹结果数据，添加callId（接受任意对象）
+const char* WrapObjectResultWithCallId(int callId, id data) {
+    LogDebug(@"包裹结果数据, callId: %d, 数据类型: %@", callId, [data class]);
     
     // 创建包含callId和data的字典
     NSDictionary *wrappedResult = @{
         @"callId": @(callId),
-        @"data": dataStr
+        @"data": data ?: [NSNull null]
     };
     
     // 序列化为JSON
@@ -70,27 +68,26 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
                 NSError *jsonError;
                 NSData *jsonData = [NSJSONSerialization dataWithJSONObject:errorDict options:0 error:&jsonError];
                 if (jsonData) {
-                    NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-                    LogDebug(@"错误JSON序列化成功: %@", jsonString);
-                    onMethodResultCallback(WrapResultWithCallId(callId, [jsonString UTF8String]));
+                    LogDebug(@"错误字典准备完成");
+                    onMethodResultCallback(WrapObjectResultWithCallId(callId, errorDict));
                 } else {
                     LogError(@"错误JSON序列化失败: %@", jsonError);
                     NSString *errorMsg = @"Error serializing FlutterError";
-                    onMethodResultCallback(WrapResultWithCallId(callId, [errorMsg UTF8String]));
+                    onMethodResultCallback(WrapObjectResultWithCallId(callId, errorMsg));
                 }
             } 
             else if ([result isKindOfClass:[NSString class]]) {
                 // For strings, pass them directly
                 LogDebug(@"回调返回字符串: %@", result);
-                onMethodResultCallback(WrapResultWithCallId(callId, [result UTF8String]));
+                onMethodResultCallback(WrapObjectResultWithCallId(callId, result));
             }
             else if ([result isKindOfClass:[NSNumber class]]) {
-                // For numbers, convert to string
+                // For numbers, pass them directly
                 LogDebug(@"回调返回数字: %@", result);
-                onMethodResultCallback(WrapResultWithCallId(callId, [[result stringValue] UTF8String]));
+                onMethodResultCallback(WrapObjectResultWithCallId(callId, result));
             }
             else if ([result isKindOfClass:[NSDictionary class]] || [result isKindOfClass:[NSArray class]]) {
-                // For dictionaries and arrays, convert to JSON
+                // For dictionaries and arrays, use WrapObjectResultWithCallId
                 NSString *type = [result isKindOfClass:[NSDictionary class]] ? @"字典" : @"数组";
                 
                 // Debug日志输出格式化的JSON
@@ -99,31 +96,18 @@ FlutterResult CreateFlutterResultBlock(int callId,  MethodResultCallback onMetho
                 if (printData) {
                     NSString *printString = [[NSString alloc] initWithData:printData encoding:NSUTF8StringEncoding];
                     LogDebug(@"回调返回%@: %@", type, printString);
-                }
-                
-                // 直接将结果对象作为Data字段，避免双重JSON序列化
-                NSDictionary *resultDict = @{@"callId": @(callId), @"data": result};
-                NSError *jsonError;
-                NSData *jsonData = [NSJSONSerialization dataWithJSONObject:resultDict options:0 error:&jsonError];
-                if (jsonData) {
-                    NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-                    LogDebug(@"返回完整JSON: %@", jsonString);
-                    onMethodResultCallback([jsonString UTF8String]);
-                } else {
-                    LogError(@"对象JSON序列化失败: %@", jsonError);
-                    NSString *errorMsg = @"Error serializing result to JSON";
-                    onMethodResultCallback(WrapResultWithCallId(callId, [errorMsg UTF8String]));
-                }
+                } 
+                onMethodResultCallback(WrapObjectResultWithCallId(callId, result));
             }
             else if (result == nil || result == [NSNull null]) {
                 // For nil or NSNull, return null string
                 LogDebug(@"回调返回null");
-                onMethodResultCallback(WrapResultWithCallId(callId, "null"));
+                onMethodResultCallback(WrapObjectResultWithCallId(callId, [NSNull null]));
             }
             else {
                 // For other types, convert to description
                 LogDebug(@"回调返回未知类型: %@", [result class]);
-                onMethodResultCallback(WrapResultWithCallId(callId, [[result description] UTF8String]));
+                onMethodResultCallback(WrapObjectResultWithCallId(callId, [result description]));
             }
         }
         
@@ -169,7 +153,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
                 LogError(@"解析JSON参数错误: %@", jsonError);
                 if (onMethodResultCallback) {
                     NSString *errorMsg = [NSString stringWithFormat:@"Error parsing JSON arguments: %@", jsonError.localizedDescription];
-                    onMethodResultCallback(WrapResultWithCallId(callId, [errorMsg UTF8String]));
+                    onMethodResultCallback(WrapObjectResultWithCallId(callId, errorMsg));
                 }
                 return;
             } else {
@@ -192,7 +176,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
         if (!plugin) {
             LogError(@"SqflitePlugin实例未找到");
             if (onMethodResultCallback) {
-                onMethodResultCallback(WrapResultWithCallId(callId, "SqflitePlugin instance not found"));
+                onMethodResultCallback(WrapObjectResultWithCallId(callId, @"SqflitePlugin instance not found"));
             }
             return;
         }
@@ -209,7 +193,7 @@ void InvokeMethod(int callId, const char* methodName, const char* jsonArguments,
             }
             if (onMethodResultCallback) {
                 NSString *errorMessage = [NSString stringWithFormat:@"Exception: %@ - %@", exception.name, exception.reason];
-                onMethodResultCallback(WrapResultWithCallId(callId, [errorMessage UTF8String]));
+                onMethodResultCallback(WrapObjectResultWithCallId(callId, errorMessage));
             }
         } @finally {
             LogDebug(@"方法调用处理完成");
