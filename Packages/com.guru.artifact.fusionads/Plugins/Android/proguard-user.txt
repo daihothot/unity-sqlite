@@ -1,0 +1,2 @@
+-keep class com.guru.unity.* { *; }
+-keep class guru.* { *; }

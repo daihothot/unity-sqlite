@@ -7,6 +7,12 @@
       "dependencies": {},
       "hash": "8041264f961b6adf7ba86e5874b306cc1b016ec7"
     },
+    "com.guru.artifact.fusionads": {
+      "version": "file:com.guru.artifact.fusionads",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.guru.artifact.gurusqlite": {
       "version": "file:com.guru.artifact.gurusqlite",
       "depth": 0,

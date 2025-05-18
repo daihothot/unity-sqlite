@@ -1,0 +1,18 @@
+{
+    "name": "com.guru.artifact.fusionads",
+    "version": "1.0.0",
+    "displayName": "Guru Artifact FusionAds",
+    "description": "Guru 聚合广告 原生层",
+    "unity": "2018.4",
+    "author": {
+        "name": "Guru SDK Team",
+        "email": "cheng.dai@castbox.fm",
+        "url": "https://www.gurugame.com"
+    },
+    "dependencies": {},
+    "keywords": [
+        "ads",
+        "fusionads"
+    ],
+    "type": "artifact"
+}
